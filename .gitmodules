@@ -1,0 +1,18 @@
+[submodule "duckdb"]
+	path = duckdb
+	url = https://github.com/duckdb/duckdb.git
+[submodule "extension-ci-tools"]
+	path = extension-ci-tools
+	url = https://github.com/duckdb/extension-ci-tools.git
+[submodule "sirius"]
+	path = sirius
+	url = https://github.com/matrixorigin/sirius.git
+	branch = dev
+[submodule "httpserver"]
+	path = httpserver
+	url = https://github.com/matrixorigin/duckdb-httpserver.git
+	branch = mo-patches
+[submodule "tae-scanner"]
+	path = tae-scanner
+	url = https://github.com/matrixorigin/duckdb-tae-scanner.git
+	branch = main
