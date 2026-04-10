@@ -1,8 +1,9 @@
 # mo-sirius-sidecar
 
-DuckDB-based sidecar for MatrixOne's GPU offload. Queries annotated with
-`/*+ GPU */` in MO are rewritten and forwarded to this sidecar, which reads
-TAE storage objects directly and returns results via HTTP.
+DuckDB-based query sidecar for MatrixOne, powered by the
+[Sirius](https://github.com/matrixorigin/sirius) GPU execution engine.
+Queries annotated with `/*+ GPU */` in MO are rewritten and forwarded to this
+sidecar, which reads TAE storage objects directly and returns results via HTTP.
 
 ## Extensions
 
@@ -12,7 +13,8 @@ TAE storage objects directly and returns results via HTTP.
 | **httpserver** | [duckdb-httpserver](https://github.com/matrixorigin/duckdb-httpserver) | ClickHouse-compatible HTTP server for accepting SQL queries |
 | **sirius** | [sirius](https://github.com/matrixorigin/sirius) | GPU-accelerated SQL execution via cuCascade/cuDF |
 
-Both are statically linked into the DuckDB binary — no manual `LOAD` needed.
+Extensions are statically linked into the DuckDB binary — no manual `LOAD` needed.
+The GPU build adds Sirius on top of the base extensions.
 
 ## Prerequisites
 
@@ -50,9 +52,10 @@ ninja -C build/release
 ```
 
 Artifacts:
-- `build/release/duckdb` — DuckDB shell with both extensions linked
+- `build/release/duckdb` — DuckDB shell with all extensions linked
 - `build/release/extension/tae_scanner/tae_scanner.duckdb_extension` — loadable
 - `build/release/extension/httpserver/httpserver.duckdb_extension` — loadable
+- `build/release/extension/sirius/sirius.duckdb_extension` — loadable (GPU build only)
 
 ### GPU build (requires CUDA)
 
