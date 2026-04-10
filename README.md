@@ -1,4 +1,4 @@
-# mo-duckdb-sidecar
+# mo-sirius-sidecar
 
 DuckDB-based sidecar for MatrixOne's GPU offload. Queries annotated with
 `/*+ GPU */` in MO are rewritten and forwarded to this sidecar, which reads
@@ -37,8 +37,8 @@ sudo pacman -S clang cmake ninja lz4 openssl git
 ## Build
 
 ```bash
-git clone --recurse-submodules https://github.com/matrixorigin/mo-duckdb-sidecar.git
-cd mo-duckdb-sidecar
+git clone --recurse-submodules https://github.com/matrixorigin/mo-sirius-sidecar.git
+cd mo-sirius-sidecar
 
 # Configure (first time only)
 cmake -S duckdb -B build/release -G Ninja \
@@ -140,7 +140,7 @@ Client                  MatrixOne                Sidecar (DuckDB)
 ## Architecture
 
 ```
-mo-duckdb-sidecar/
+mo-sirius-sidecar/
 ├── duckdb/                  ← DuckDB v1.5.1 (submodule)
 ├── extension-ci-tools/      ← DuckDB build helpers (submodule)
 ├── tae-scanner/             ← TAE storage reader extension (submodule)

@@ -6,7 +6,7 @@
 
 ## 1. Executive Summary
 
-This document describes the architecture of the **mo-duckdb-sidecar**: a DuckDB-based
+This document describes the architecture of the **mo-sirius-sidecar**: a DuckDB-based
 query sidecar for **MatrixOne** (a cloud-native HTAP database). Analytical workloads
 annotated with `/*+ GPU */` hints in MO are rewritten and forwarded to this sidecar,
 which reads TAE storage objects directly and executes queries using DuckDB's vectorized
