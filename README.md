@@ -42,6 +42,9 @@ sudo pacman -S clang cmake ninja lz4 openssl git
 git clone --recurse-submodules https://github.com/matrixorigin/mo-sirius-sidecar.git
 cd mo-sirius-sidecar
 
+# For GPU builds, also init sirius's internal deps:
+git -C sirius submodule update --init cucascade
+
 # Configure (first time only)
 cmake -S duckdb -B build/release -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
@@ -59,13 +62,46 @@ Artifacts:
 
 ### GPU build (requires CUDA)
 
-```bash
-cmake -S duckdb -B build/release-gpu -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DDUCKDB_EXTENSION_CONFIGS="$(pwd)/extension_config_gpu.cmake"
+The Sirius extension uses [pixi](https://pixi.sh) to manage CUDA toolkit,
+cuDF, and other RAPIDS dependencies.  Install pixi first, then initialize
+the Sirius conda environment:
 
-ninja -C build/release-gpu
+```bash
+# Install pixi (one-time)
+curl -fsSL https://pixi.sh/install.sh | bash
+
+# Initialize Sirius submodule deps (cucascade is required at build time)
+git -C sirius submodule update --init cucascade
+
+# Install CUDA + RAPIDS toolchain into sirius/.pixi/
+cd sirius && pixi install && cd ..
 ```
+
+Build from within the pixi environment so the compiler can find CUDA, cuDF,
+lz4, and OpenSSL:
+
+```bash
+SIDECAR_DIR=$(pwd)
+
+# Configure (first time only)
+cd sirius && pixi run -- bash -c "
+  cmake -S $SIDECAR_DIR/duckdb -B $SIDECAR_DIR/build/release-gpu -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DDUCKDB_EXTENSION_CONFIGS=$SIDECAR_DIR/extension_config_gpu.cmake
+" && cd ..
+
+# Build
+cd sirius && pixi run -- bash -c "
+  ninja -C $SIDECAR_DIR/build/release-gpu
+" && cd ..
+```
+
+> **Note:** The pixi compiler wrapper (conda-forge GCC) does not see system
+> `/usr/include`, so system libraries like lz4 and OpenSSL are declared as
+> pixi dependencies in `sirius/pixi.toml`.
+
+> **Note:** On machines without an NVIDIA GPU the build succeeds but the
+> binary will print "NVML not available" and refuse GPU queries at runtime.
 
 This adds the Sirius GPU execution engine on top of tae_scanner + httpserver.
 
@@ -144,17 +180,18 @@ Client                  MatrixOne                Sidecar (DuckDB)
 
 ```
 mo-sirius-sidecar/
-├── duckdb/                  ← DuckDB v1.5.1 (submodule)
-├── extension-ci-tools/      ← DuckDB build helpers (submodule)
-├── tae-scanner/             ← TAE storage reader extension (submodule)
-│   ├── src/                 ← Scanner, column fill, filter pushdown, object reader
-│   └── include/             ← Headers
-├── httpserver/              ← HTTP query server extension (submodule)
-│   └── src/                 ← Server, JSON/CSV/XML serializers
-├── sirius/                  ← GPU SQL execution engine (submodule)
-│   └── src/                 ← GPU physical operators, cuCascade integration
-├── extension_config.cmake   ← Master config loading tae-scanner + httpserver
-├── Makefile                 ← Convenience wrapper (calls cmake + ninja)
-├── DESIGN.md                ← Full architecture document
+├── duckdb/                    ← DuckDB v1.5.1 (submodule)
+├── extension-ci-tools/        ← DuckDB build helpers (submodule)
+├── tae-scanner/               ← TAE storage reader (submodule)
+│   ├── src/                   ← Scanner, filter, object reader
+│   └── include/               ← Headers
+├── httpserver/                ← HTTP query server (submodule)
+│   └── src/                   ← Server, serializers
+├── sirius/                    ← GPU SQL engine (submodule)
+│   └── src/                   ← GPU operators, cuCascade
+├── extension_config.cmake     ← CPU extensions config
+├── extension_config_gpu.cmake ← GPU extensions config
+├── Makefile                   ← Build wrapper
+├── DESIGN.md                  ← Architecture document
 └── README.md
 ```
