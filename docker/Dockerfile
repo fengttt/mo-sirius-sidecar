@@ -25,8 +25,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential cmake && \
     rm -rf /var/lib/apt/lists/*
 
-ARG MO_REPO=https://github.com/matrixorigin/matrixone.git
-ARG MO_BRANCH=main
+ARG MO_REPO=https://github.com/aunjgr/matrixone.git
+ARG MO_BRANCH=sidecar-offload-fixes
 
 RUN git clone --depth 1 -b ${MO_BRANCH} ${MO_REPO} /mo
 WORKDIR /mo

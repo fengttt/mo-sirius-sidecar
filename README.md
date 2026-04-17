@@ -107,13 +107,34 @@ This adds the Sirius GPU execution engine on top of tae_scanner + httpserver.
 
 ## Deploy
 
-### Quick start
+### CPU sidecar
 
 ```bash
-DUCKDB_HTTPSERVER_PORT=9876 ./build/release/duckdb -unsigned
+DUCKDB_HTTPSERVER_FOREGROUND=1 \
+DUCKDB_HTTPSERVER_PORT=9876 \
+  ./build/release/duckdb -unsigned
 ```
 
-The HTTP server auto-starts on the specified port. No `-cmd` flags needed.
+The HTTP server auto-starts on the specified port.
+`DUCKDB_HTTPSERVER_FOREGROUND=1` keeps the process running as a daemon (blocks
+after startup instead of dropping to the interactive shell).
+
+### GPU sidecar
+
+The GPU build **must** run inside the pixi environment so that CUDA and cuDF
+runtime libraries are on `LD_LIBRARY_PATH`:
+
+```bash
+cd sirius && pixi run -- bash -c "
+  cd .. && \
+  DUCKDB_HTTPSERVER_FOREGROUND=1 \
+  DUCKDB_HTTPSERVER_PORT=9876 \
+  SIRIUS_LOG_LEVEL=info \
+    ./build/release-gpu/duckdb -unsigned
+"
+```
+
+Set `SIRIUS_LOG_LEVEL=debug` for verbose GPU execution logs (very noisy).
 
 ### Environment variables
 
@@ -122,6 +143,8 @@ The HTTP server auto-starts on the specified port. No `-cmd` flags needed.
 | `DUCKDB_HTTPSERVER_PORT` | *(none)* | Set to auto-start HTTP server on this port |
 | `DUCKDB_HTTPSERVER_HOST` | `0.0.0.0` | Listen address |
 | `DUCKDB_HTTPSERVER_AUTH` | *(empty)* | Auth token (X-API-Key or Basic auth) |
+| `DUCKDB_HTTPSERVER_FOREGROUND` | `0` | Set to `1` to block after startup (daemon mode) |
+| `SIRIUS_LOG_LEVEL` | `warn` | Sirius GPU engine log level (`info`, `debug`, `trace`) |
 
 ### Manual start (interactive)
 
@@ -134,26 +157,66 @@ The HTTP server auto-starts on the specified port. No `-cmd` flags needed.
 
 ```bash
 curl 'http://localhost:9876/?default_format=JSONCompact&query=SELECT+42'
+# Expected: {"meta":[{"name":"42","type":"Int32"}],"data":[[42]],"rows":1}
 ```
 
 ## MatrixOne integration
 
-1. Start the sidecar on port 9876 (see Deploy above)
-2. Start MO with `-debug-http :8888`
-3. Configure the sidecar URL in MO:
-   ```toml
-   # etc/launch/cn.toml
-   [cn.frontend]
-   sidecarUrl = "http://localhost:9876"
-   ```
-   Or per-session: `SET sidecar_url = 'http://localhost:9876';`
-4. Run queries with the sidecar hint (note: `--comments` flag needed for mariadb client):
-   ```sql
-   -- CPU mode (plain DuckDB):
-   /*+ SIDECAR */ SELECT count(*) FROM tpch.lineitem WHERE l_shipdate < '1998-09-01';
-   -- GPU mode (Sirius, wraps in gpu_execution()):
-   /*+ SIDECAR GPU */ SELECT count(*) FROM tpch.lineitem WHERE l_shipdate < '1998-09-01';
-   ```
+### 1. Start the sidecar
+
+Start the CPU or GPU sidecar on port 9876 (see [Deploy](#deploy) above).
+
+### 2. Start MatrixOne
+
+MO must be started with the `-debug-http` flag — this enables the internal
+`/debug/tae/manifest` endpoint that the sidecar uses to discover TAE objects:
+
+```bash
+cd /path/to/matrixone
+./mo-service -debug-http :8888 -launch etc/launch/launch.toml
+```
+
+### 3. Configure the sidecar URL
+
+Add to `cn.toml`:
+
+```toml
+[cn.frontend]
+sidecarUrl = "http://localhost:9876"
+```
+
+Or set it per-session (useful for testing):
+
+```sql
+SET sidecar_url = 'http://localhost:9876';
+```
+
+### 4. Run queries
+
+Use `--comments` when connecting via mariadb so SQL hints are preserved:
+
+```bash
+mariadb --skip-ssl -h 127.0.0.1 -P 6001 -u dump -p111 --comments
+```
+
+```sql
+-- CPU sidecar (DuckDB vectorized engine):
+/*+ SIDECAR */ SELECT count(*) FROM tpch.lineitem WHERE l_shipdate < '1998-09-01';
+
+-- GPU sidecar (Sirius + cuDF, wraps query in gpu_execution()):
+/*+ SIDECAR GPU */ SELECT count(*) FROM tpch.lineitem WHERE l_shipdate < '1998-09-01';
+```
+
+If the sidecar is not configured or not reachable, MO silently falls back to
+native execution (the hint is stripped).
+
+### Known issues
+
+- **MO HTTP timeout:** MO's `fileservice` package overrides `http.DefaultTransport`
+  with a 20-second `ResponseHeaderTimeout`. The sidecar HTTP client in MO must use
+  a dedicated `http.Transport` to avoid this — see `pkg/frontend/sidecar_offload.go`.
+- **GPU VRAM limits:** Multi-table joins at SF100+ may hang if the GPU has
+  insufficient VRAM (tested: RTX 3070 4GB handles SF10 fully, SF100 Q1-Q2 only).
 
 ## How it works
 
